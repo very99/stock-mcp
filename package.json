@@ -1,0 +1,58 @@
+{
+  "name": "stock-mcp",
+  "version": "1.0.0",
+  "description": "📈 A comprehensive MCP server for Chinese A-share stock data collection and analysis. Collect real-time quotes, technical indicators, news, and market sentiment.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "stock-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "stock",
+    "a-share",
+    "china-stock",
+    "financial-data",
+    "real-time-quotes",
+    "technical-analysis",
+    "stock-news",
+    "investment",
+    "claude",
+    "amazon-q",
+    "ai-tools"
+  ],
+  "author": "very99",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/very99/stock-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/very99/stock-mcp/issues"
+  },
+  "homepage": "https://github.com/very99/stock-mcp#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.4.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "tsx": "^4.0.0",
+    "@types/node": "^20.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ]
+}
