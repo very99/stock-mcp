@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /**
- * Stock MCP Server
- * 股票数据收集 MCP 服务器
+ * Stock MCP Server - Enhanced Version
+ * 股票数据收集 MCP 服务器 - 增强版
  * 
  * A comprehensive MCP server for Chinese A-share stock data collection
  * 用于中国A股数据收集的综合性 MCP 服务器
@@ -47,6 +47,30 @@ const tools = [
         include_technical: {
           type: "boolean",
           description: "是否包含技术指标数据",
+          default: true
+        }
+      },
+      required: ["symbol"]
+    }
+  },
+  {
+    name: "get_historical_data",
+    description: "获取股票历史数据和趋势分析",
+    inputSchema: {
+      type: "object",
+      properties: {
+        symbol: {
+          type: "string",
+          description: "股票代码"
+        },
+        days: {
+          type: "number",
+          description: "历史数据天数，默认60天",
+          default: 60
+        },
+        include_analysis: {
+          type: "boolean",
+          description: "是否包含趋势分析",
           default: true
         }
       },
@@ -148,7 +172,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         output += `🏷️ 股票信息\n`;
         output += `• 代码: ${stockData.symbol.toUpperCase()}\n`;
         output += `• 名称: ${stockData.name}\n`;
-        output += `• 数据源: ${realtimeResult.source}\n\n`;
+        output += `• 数据源: ${stockData.sources ? stockData.sources.join(', ') : realtimeResult.source}\n\n`;
 
         output += `💰 实时行情\n`;
         output += `• 当前价格: ¥${Formatters.formatNumber(stockData.currentPrice)}\n`;
@@ -164,9 +188,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           output += `• ${Formatters.formatTechnicalIndicator('MA5', technicalData.ma5)}\n`;
           output += `• ${Formatters.formatTechnicalIndicator('MA10', technicalData.ma10)}\n`;
           output += `• ${Formatters.formatTechnicalIndicator('MA20', technicalData.ma20)}\n`;
+          output += `• ${Formatters.formatTechnicalIndicator('MA60', technicalData.ma60)}\n`;
           output += `• ${Formatters.formatTechnicalIndicator('RSI', technicalData.rsi)}\n`;
+          output += `• MACD: DIF=${technicalData.macd.dif}, DEA=${technicalData.macd.dea}, MACD=${technicalData.macd.macd}\n`;
           output += `• 量比: ${technicalData.volumeRatio.toFixed(2)}\n`;
+          output += `• 换手率: ${technicalData.turnoverRate.toFixed(2)}%\n`;
         }
+
+        return {
+          content: [{
+            type: "text",
+            text: output
+          }]
+        };
+      }
+
+      case "get_stock_news": {
+        const symbol = args.symbol;
+        const stockName = args.stock_name;
+
+        const newsResult = await newsCollector.getStockNews(symbol, stockName);
+        
+        if (!newsResult.success) {
+          return {
+            content: [{
+              type: "text",
+              text: `❌ 获取新闻数据失败: ${newsResult.error}`
+            }]
+          };
+        }
+
+        const newsItems = newsResult.data || [];
+        const sentiment = newsCollector.analyzeNewsSentiment(newsItems);
+
+        let output = `📰 ${stockName}(${symbol.toUpperCase()}) 新闻分析\n\n`;
+        output += `🎯 新闻情绪分析\n`;
+        output += `• 积极: ${sentiment.positive}条\n`;
+        output += `• 消极: ${sentiment.negative}条\n`;
+        output += `• 中性: ${sentiment.neutral}条\n`;
+        output += `• 整体情绪: ${Formatters.formatSentiment(sentiment.overall)}\n\n`;
+
+        output += `📋 最新相关新闻 (${newsItems.length}条)\n`;
+        newsItems.slice(0, 10).forEach((item, index) => {
+          const sentimentEmoji = item.sentiment === 'positive' ? '😊' : 
+                                item.sentiment === 'negative' ? '😟' : '😐';
+          output += `\n${index + 1}. ${item.title} ${sentimentEmoji}\n`;
+          output += `   📅 ${Formatters.formatTime(item.publishTime)}\n`;
+          output += `   📰 来源: ${item.source}\n`;
+          if (item.content && item.content.length > 100) {
+            output += `   📝 ${item.content.substring(0, 100)}...\n`;
+          } else if (item.content) {
+            output += `   📝 ${item.content}\n`;
+          }
+        });
 
         return {
           content: [{
@@ -190,7 +264,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           output += `• 当前价格: ¥${Formatters.formatNumber(stockData.currentPrice)}\n`;
           output += `• 涨跌: ${Formatters.formatChange(stockData.change, stockData.changePercent)}\n`;
           output += `• 成交量: ${Formatters.formatAmount(stockData.volume)}股\n`;
-          output += `• 成交额: ¥${Formatters.formatAmount(stockData.turnover)}\n\n`;
+          output += `• 成交额: ¥${Formatters.formatAmount(stockData.turnover)}\n`;
+          output += `• 数据源: ${stockData.sources ? stockData.sources.join(', ') : stockResult.source}\n\n`;
         }
 
         // 2. 获取技术指标
@@ -199,11 +274,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           const technical = technicalResult.data;
           output += `📈 技术指标\n`;
           output += `• ${Formatters.formatTechnicalIndicator('RSI', technical.rsi)}\n`;
-          output += `• MA5: ${technical.ma5.toFixed(2)} | MA20: ${technical.ma20.toFixed(2)}\n`;
-          output += `• 量比: ${technical.volumeRatio.toFixed(2)}\n\n`;
+          output += `• MA5: ${technical.ma5.toFixed(2)} | MA20: ${technical.ma20.toFixed(2)} | MA60: ${technical.ma60.toFixed(2)}\n`;
+          output += `• MACD: ${technical.macd.dif.toFixed(3)} | 量比: ${technical.volumeRatio.toFixed(2)}\n\n`;
         }
 
-        // 3. 获取市场环境
+        // 3. 获取新闻情绪
+        const newsResult = await newsCollector.getStockNews(symbol, stockName);
+        if (newsResult.success && newsResult.data) {
+          const sentiment = newsCollector.analyzeNewsSentiment(newsResult.data);
+          output += `📰 新闻情绪\n`;
+          output += `• 整体情绪: ${Formatters.formatSentiment(sentiment.overall)}\n`;
+          output += `• 新闻统计: 积极${sentiment.positive}条, 消极${sentiment.negative}条, 中性${sentiment.neutral}条\n\n`;
+        }
+
+        // 4. 获取市场环境
         const marketResult = await marketCollector.getMarketOverview();
         if (marketResult.success && marketResult.data) {
           const market = marketResult.data;
@@ -212,7 +296,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           output += `• 涨跌比: ${market.marketSentiment.rising}:${market.marketSentiment.falling}\n\n`;
         }
 
-        output += `⚠️ 风险提示: 以上数据仅供参考，投资有风险，决策需谨慎！`;
+        output += `⚠️ 风险提示: 以上数据仅供参考，投资有风险，决策需谨慎！\n`;
+        output += `📊 数据来源: 多源交叉验证，确保数据准确性`;
 
         return {
           content: [{
@@ -241,8 +326,8 @@ async function main() {
   try {
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("🚀 Stock MCP Server is running");
-    console.error("📈 Ready to collect comprehensive A-share stock data!");
+    console.error("🚀 Stock MCP Server Enhanced is running");
+    console.error("📈 Ready to collect comprehensive A-share stock data with multi-source verification!");
   } catch (error) {
     console.error("❌ Server error:", error);
     process.exit(1);
